@@ -132,6 +132,76 @@ int commonBorder(std::vector<std::vector<int>> &dwellBuffer,
 	return commonDwell;
 }
 
+void threadedCommonBorder(
+	unsigned int i,
+	unsigned int s,
+	unsigned int yMax,
+	unsigned int xMax,
+	unsigned int atY,
+	unsigned int atX,
+	std::vector<std::vector<int>> &dwellBuffer,
+	int &commonDwell,
+	std::complex<double> const &cmin,
+	std::complex<double> const &dc,
+	atomic<int> &lock
+) {
+	if(commonDwell != -2) {
+		unsigned const int y = s % 2 == 0 ? atY + i : (s == 1 ? yMax : atY);
+		unsigned const int x = s % 2 != 0 ? atX + i : (s == 0 ? xMax : atX);
+		if (y < res && x < res) {
+			if (dwellBuffer.at(y).at(x) < 0) {
+				dwellBuffer.at(y).at(x) = pixelDwell(cmin, dc, y, x);
+			}
+			while(!lock.compare_exchange_weak(0, 1));
+			if (commonDwell == -1) {
+				commonDwell = dwellBuffer.at(y).at(x);
+			} else if (commonDwell != dwellBuffer.at(y).at(x)) {
+				commonDwell = -2;
+			}
+			lock = 0;
+		}
+	}
+}
+
+int commonBorder(std::vector<std::vector<int>> &dwellBuffer,
+				 std::complex<double> const &cmin,
+				 std::complex<double> const &dc,
+				 unsigned int const atY,
+				 unsigned int const atX,
+				 unsigned int const blockSize)
+{
+	unsigned int const yMax = (res > atY + blockSize - 1) ? atY + blockSize - 1 : res - 1;
+	unsigned int const xMax = (res > atX + blockSize - 1) ? atX + blockSize - 1 : res - 1;
+	atomic<int> commonDwell = -1;
+	for (unsigned int i = 0; i < blockSize; i++) {
+		vector<thread> threads;
+		for (unsigned int s = 0; s < 4; s++) {
+			threads.push_back(
+				thread(
+					threadedCommonBorder,
+					i,
+					s,
+					yMax,
+					xMax,
+					atY,
+					atX,
+					ref(dwellBuffer),
+					commonDwell,
+					cmin,
+					dc
+				)
+			);
+		}
+		for(unsigned int s = 0; s < 4; s++) {
+			threads.at(s).join();
+		}
+	}
+	if(commonDwell == -2) {
+		commonDwell = -1;
+	}
+	return commonDwell;
+}
+
 void markBorder(std::vector<std::vector<int>> &dwellBuffer,
 				int const dwell,
 				unsigned int const atY,
@@ -365,7 +435,7 @@ int main( int argc, char *argv[] )
 	}
 
 	std::vector<std::vector<int>> dwellBuffer(res, std::vector<int>(res, -1));
-	
+
 	if (mariani) {
 		// Scale the blockSize from res up to a subdividable value
 		// Number of possible subdivisions:
