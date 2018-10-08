@@ -12,7 +12,10 @@
 #include <deque>
 #include <mutex>
 #include <atomic>
+#include <thread>
 #include <condition_variable>
+
+using namespace std;
 
 static std::vector<std::pair<double,rgb>> colourGradient = {
 	{ 0.0		, { 0  , 0  , 0   } },
@@ -150,8 +153,7 @@ void markBorder(std::vector<std::vector<int>> &dwellBuffer,
 	}
 }
 
-// Currently the same as computeBlock
-void threadedComputeBlock(std::vector<std::vector<int>> &dwellBuffer,
+void computeBlock(std::vector<std::vector<int>> &dwellBuffer,
 	std::complex<double> const &cmin,
 	std::complex<double> const &dc,
 	unsigned int const atY,
@@ -168,7 +170,8 @@ void threadedComputeBlock(std::vector<std::vector<int>> &dwellBuffer,
 	}
 }
 
-void computeBlock(std::vector<std::vector<int>> &dwellBuffer,
+// Currently the same as computeBlock
+void threadedComputeBlock(std::vector<std::vector<int>> &dwellBuffer,
 	std::complex<double> const &cmin,
 	std::complex<double> const &dc,
 	unsigned int const atY,
@@ -177,7 +180,7 @@ void computeBlock(std::vector<std::vector<int>> &dwellBuffer,
 	unsigned int const omitBorder = 0)
 {
 	unsigned int const yMax = (res > atY + blockSize) ? atY + blockSize : res;
-	unsigned int const xMax = (res > atX + blockSize) ? atX + blockSize : res;
+	unsigned int const xMax = res;
 	for (unsigned int y = atY + omitBorder; y < yMax - omitBorder; y++) {
 		for (unsigned int x = atX + omitBorder; x < xMax - omitBorder; x++) {
 			dwellBuffer.at(y).at(x) = pixelDwell(cmin, dc, y, x);
@@ -267,6 +270,15 @@ void worker(void) {
 	// Currently I'm doing nothing
 }
 
+void prova(std::vector<std::vector<int>> &dwellBuffer,
+	std::complex<double> const &cmin,
+	std::complex<double> const &dc,
+	unsigned int const atY,
+	unsigned int const atX,
+	unsigned int const blockSize) {
+	cout << "BELLLA " << endl;
+}
+
 int main( int argc, char *argv[] )
 {
 	std::string output = "output.png";
@@ -353,7 +365,7 @@ int main( int argc, char *argv[] )
 	}
 
 	std::vector<std::vector<int>> dwellBuffer(res, std::vector<int>(res, -1));
-
+	
 	if (mariani) {
 		// Scale the blockSize from res up to a subdividable value
 		// Number of possible subdivisions:
@@ -364,7 +376,30 @@ int main( int argc, char *argv[] )
 		marianiSilver(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize);
 	} else {
 		// Traditional Mandelbrot-Set computation or the 'Escape Time' algorithm
-		computeBlock(dwellBuffer, cmin, dc, 0, 0, res, 0);
+		unsigned int const NUM_THREAD = thread::hardware_concurrency();
+		cout << "NUM THREAD " << NUM_THREAD << endl;
+		unsigned int const HEIGHT_PER_THREAD = res / NUM_THREAD;
+		vector<thread> threads;
+		for(int i=0;i<NUM_THREAD; i++) {
+			threads.push_back(
+
+				thread(
+					threadedComputeBlock,
+
+					ref(dwellBuffer),
+					cmin,
+					dc,
+					HEIGHT_PER_THREAD * i,
+					0,
+					HEIGHT_PER_THREAD,0
+				)
+			);
+		}
+
+		for(int i=0;i<NUM_THREAD; i++) {
+			threads.at(i).join();
+		}
+
 		if (mark)
 			markBorder(dwellBuffer, dwellCompute, 0, 0, res);
 	}
@@ -398,4 +433,3 @@ int main( int argc, char *argv[] )
 
 	return 0;
 }
-
