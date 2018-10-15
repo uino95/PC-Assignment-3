@@ -300,7 +300,7 @@ std::deque<job> queue;
 
 void addWork(job task)
 {
-	
+	unique_lock<mutex> lck(mutexVariable);
 	queue.push_back(task);
 }
 
@@ -436,8 +436,10 @@ void help() {
 
 void worker(void) {
 	while(!queue.empty()) {
+		mutexVariable.lock();
 		job currentTask = queue.back();
 		queue.pop_back();
+		mutexVariable.unlock();
 		marianiSilverJob(currentTask.dwellBuffer, currentTask.cmin, currentTask.dc, currentTask.atY, currentTask.atX, currentTask.blockSize);
 	}
 }
