@@ -6,6 +6,7 @@
 #include "utilities/lodepng.h"
 #include "utilities/rgba.hpp"
 #include "utilities/num.hpp"
+#include "utilities/thread_pool.hpp"
 #include <complex>
 #include <cassert>
 #include <limits>
@@ -39,6 +40,8 @@ static constexpr const int  dwellCompute = std::numeric_limits<int>::max()-1;
 static constexpr const rgba borderFill(255,255,255,255);
 static constexpr const rgba borderCompute(255,0,0,255);
 static std::vector<rgba> colours;
+
+std::mutex mutexVariable;	//mutex variable
 
 void createColourMap(unsigned int const maxDwell) {
 	rgb colour(0,0,0);
@@ -140,30 +143,41 @@ void threadedCommonBorder(
 	unsigned int atY,
 	unsigned int atX,
 	std::vector<std::vector<int>> &dwellBuffer,
-	int &commonDwell,
+	int& commonDwell,
 	std::complex<double> const &cmin,
-	std::complex<double> const &dc,
-	atomic<int> &lock
+	std::complex<double> const &dc
 ) {
-	if(commonDwell != -2) {
-		unsigned const int y = s % 2 == 0 ? atY + i : (s == 1 ? yMax : atY);
-		unsigned const int x = s % 2 != 0 ? atX + i : (s == 0 ? xMax : atX);
-		if (y < res && x < res) {
-			if (dwellBuffer.at(y).at(x) < 0) {
-				dwellBuffer.at(y).at(x) = pixelDwell(cmin, dc, y, x);
-			}
-			while(!lock.compare_exchange_weak(0, 1));
-			if (commonDwell == -1) {
-				commonDwell = dwellBuffer.at(y).at(x);
-			} else if (commonDwell != dwellBuffer.at(y).at(x)) {
-				commonDwell = -2;
-			}
-			lock = 0;
+	unsigned const int y = s % 2 == 0 ? atY + i : (s == 1 ? yMax : atY);
+	unsigned const int x = s % 2 != 0 ? atX + i : (s == 0 ? xMax : atX);
+	if (y < res && x < res) {
+		if (dwellBuffer.at(y).at(x) < 0) {
+			dwellBuffer.at(y).at(x) = pixelDwell(cmin, dc, y, x);
 		}
+
+		mutexVariable.lock();
+		if (commonDwell == -1) {
+			commonDwell = dwellBuffer.at(y).at(x);
+		} else if (commonDwell != dwellBuffer.at(y).at(x)) {
+			commonDwell = -2;	//TODO should force thread kill. Explain in pdf that -2 is different but accomplish same goal
+		}
+		mutexVariable.unlock();
 	}
 }
 
-int commonBorder(std::vector<std::vector<int>> &dwellBuffer,
+void prova(unsigned int i,
+	unsigned int s,
+	unsigned int yMax,
+	unsigned int xMax,
+	unsigned int atY,
+	unsigned int atX,
+	std::vector<std::vector<int>> &dwellBuffer,
+	int &commonDwell,
+	std::complex<double> const &cmin,
+	std::complex<double> const &dc) {
+	cout << "BELLLA " << endl;
+}
+
+int multipleThreadCommonBorder(std::vector<std::vector<int>> &dwellBuffer,
 				 std::complex<double> const &cmin,
 				 std::complex<double> const &dc,
 				 unsigned int const atY,
@@ -172,7 +186,7 @@ int commonBorder(std::vector<std::vector<int>> &dwellBuffer,
 {
 	unsigned int const yMax = (res > atY + blockSize - 1) ? atY + blockSize - 1 : res - 1;
 	unsigned int const xMax = (res > atX + blockSize - 1) ? atX + blockSize - 1 : res - 1;
-	atomic<int> commonDwell = -1;
+	int commonDwell = -1;
 	for (unsigned int i = 0; i < blockSize; i++) {
 		vector<thread> threads;
 		for (unsigned int s = 0; s < 4; s++) {
@@ -186,7 +200,7 @@ int commonBorder(std::vector<std::vector<int>> &dwellBuffer,
 					atY,
 					atX,
 					ref(dwellBuffer),
-					commonDwell,
+					ref(commonDwell),
 					cmin,
 					dc
 				)
@@ -195,10 +209,53 @@ int commonBorder(std::vector<std::vector<int>> &dwellBuffer,
 		for(unsigned int s = 0; s < 4; s++) {
 			threads.at(s).join();
 		}
+
+		threads.resize();
+
+		if(commonDwell == -2) {
+			return commonDwell;
+		}
 	}
-	if(commonDwell == -2) {
-		commonDwell = -1;
+
+	return commonDwell;
+}
+
+int pooledThreadCommonBorder(std::vector<std::vector<int>> &dwellBuffer,
+				 std::complex<double> const &cmin,
+				 std::complex<double> const &dc,
+				 unsigned int const atY,
+				 unsigned int const atX,
+				 unsigned int const blockSize)
+{
+	unsigned int const yMax = (res > atY + blockSize - 1) ? atY + blockSize - 1 : res - 1;
+	unsigned int const xMax = (res > atX + blockSize - 1) ? atX + blockSize - 1 : res - 1;
+	int commonDwell = -1;
+	ThreadPool pool(4);
+	function<void ()> function;
+	for (unsigned int i = 0; i < blockSize; i++) {
+		for (unsigned int s = 0; s < 4; s++) {
+			pool.pushTask(
+				bind(
+					threadedCommonBorder,
+					i,
+					s,
+					yMax,
+					xMax,
+					atY,
+					atX,
+					ref(dwellBuffer),
+					ref(commonDwell),
+					cmin,
+					dc
+				)
+			);
+		}
+
+		if(commonDwell == -2) {
+			return commonDwell;
+		}
 	}
+
 	return commonDwell;
 }
 
@@ -301,7 +358,7 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 					unsigned int const atX,
 					unsigned int const blockSize)
 {
-	int dwell = commonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize);
+	int dwell = multipleThreadCommonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize);
 	if ( dwell >= 0 ) {
 		fillBlock(dwellBuffer, dwell, atY, atX, blockSize);
 		if (mark)
@@ -338,15 +395,6 @@ void help() {
 
 void worker(void) {
 	// Currently I'm doing nothing
-}
-
-void prova(std::vector<std::vector<int>> &dwellBuffer,
-	std::complex<double> const &cmin,
-	std::complex<double> const &dc,
-	unsigned int const atY,
-	unsigned int const atX,
-	unsigned int const blockSize) {
-	cout << "BELLLA " << endl;
 }
 
 int main( int argc, char *argv[] )
