@@ -6,6 +6,7 @@
 #include "utilities/lodepng.h"
 #include "utilities/rgba.hpp"
 #include "utilities/num.hpp"
+#include "utilities/thread_pool.hpp"
 #include <complex>
 #include <cassert>
 #include <limits>
@@ -142,7 +143,7 @@ void threadedCommonBorder(
 	unsigned int atY,
 	unsigned int atX,
 	std::vector<std::vector<int>> &dwellBuffer,
-	int &commonDwell,
+	int& commonDwell,
 	std::complex<double> const &cmin,
 	std::complex<double> const &dc
 ) {
@@ -201,6 +202,7 @@ int multipleThreadCommonBorder(std::vector<std::vector<int>> &dwellBuffer,
 			return commonDwell;
 		}
 	}
+
 	return commonDwell;
 }
 
@@ -306,8 +308,9 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 	int dwell = multipleThreadCommonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize);
 	if ( dwell >= 0 ) {
 		fillBlock(dwellBuffer, dwell, atY, atX, blockSize);
-		if (mark)
-			markBorder(dwellBuffer, dwellFill, atY, atX, blockSize);
+		if (mark) {
+					markBorder(dwellBuffer, dwellFill, atY, atX, blockSize);
+		}
 	} else if (blockSize <= blockDim) {
 		computeBlock(dwellBuffer, cmin, dc, atY, atX, blockSize);
 		if (mark)
@@ -340,15 +343,6 @@ void help() {
 
 void worker(void) {
 	// Currently I'm doing nothing
-}
-
-void prova(std::vector<std::vector<int>> &dwellBuffer,
-	std::complex<double> const &cmin,
-	std::complex<double> const &dc,
-	unsigned int const atY,
-	unsigned int const atX,
-	unsigned int const blockSize) {
-	cout << "BELLLA " << endl;
 }
 
 int main( int argc, char *argv[] )
@@ -446,6 +440,7 @@ int main( int argc, char *argv[] )
 		unsigned int const correctedBlockSize = std::pow(subDiv,numDiv) * blockDim;
 		// Mariani-Silver subdivision algorithm
 		marianiSilver(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize);
+	    std::cout << "fine2" << std::endl;
 	} else {
 		// Traditional Mandelbrot-Set computation or the 'Escape Time' algorithm
 		unsigned int const NUM_THREAD = thread::hardware_concurrency();
