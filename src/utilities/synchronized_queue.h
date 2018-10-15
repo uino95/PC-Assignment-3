@@ -9,11 +9,14 @@ public:
     SynchronizedQueue() {}
     void put(const T &data);
     T get();
-    int size();
 
     int size()
     {
         return queue.size();
+    }
+
+    void resize(int num = 0) {
+      queue.resize(num);
     }
 private:
     SynchronizedQueue(const SynchronizedQueue &) = delete;

@@ -1,4 +1,5 @@
-#include "threadpool.hpp"
+#include "thread_pool.hpp"
+#include <iostream>
 void doNothing() {}
 
 ThreadPool::ThreadPool(int nr_threads): done(false)
@@ -25,8 +26,10 @@ ThreadPool::~ThreadPool()
 
 void ThreadPool::worker_thread()
 {
-    while (!done)
-    {
-        work_queue.get()(); //Get a function and call it
-    }
+  while (!done)
+  {
+      std::cout << "inizio " << work_queue.size() << std::endl;
+      work_queue.get()(); //Get a function and call it
+      std::cout << "fine" << work_queue.size() << std::endl;
+  }
 }

@@ -43,6 +43,8 @@ static std::vector<rgba> colours;
 
 std::mutex mutexVariable;	//mutex variable
 
+ThreadPool pool(4);
+
 void createColourMap(unsigned int const maxDwell) {
 	rgb colour(0,0,0);
 	double pos = 0.0;
@@ -157,8 +159,10 @@ void threadedCommonBorder(
 		mutexVariable.lock();
 		if (commonDwell == -1) {
 			commonDwell = dwellBuffer.at(y).at(x);
+			std::cout << "dwellbuffer" << std::endl;
 		} else if (commonDwell != dwellBuffer.at(y).at(x)) {
-			commonDwell = -2;	//TODO should force thread kill. Explain in pdf that -2 is different but accomplish same goal
+			commonDwell = -2;
+			std::cout << "-2" << std::endl;
 		}
 		mutexVariable.unlock();
 	}
@@ -210,8 +214,6 @@ int multipleThreadCommonBorder(std::vector<std::vector<int>> &dwellBuffer,
 			threads.at(s).join();
 		}
 
-		threads.resize();
-
 		if(commonDwell == -2) {
 			return commonDwell;
 		}
@@ -230,8 +232,6 @@ int pooledThreadCommonBorder(std::vector<std::vector<int>> &dwellBuffer,
 	unsigned int const yMax = (res > atY + blockSize - 1) ? atY + blockSize - 1 : res - 1;
 	unsigned int const xMax = (res > atX + blockSize - 1) ? atX + blockSize - 1 : res - 1;
 	int commonDwell = -1;
-	ThreadPool pool(4);
-	function<void ()> function;
 	for (unsigned int i = 0; i < blockSize; i++) {
 		for (unsigned int s = 0; s < 4; s++) {
 			pool.pushTask(
@@ -251,9 +251,12 @@ int pooledThreadCommonBorder(std::vector<std::vector<int>> &dwellBuffer,
 			);
 		}
 
-		if(commonDwell == -2) {
+		pool.clear();
+
+		if(commonDwell != -2) {
 			return commonDwell;
 		}
+
 	}
 
 	return commonDwell;
@@ -358,11 +361,13 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 					unsigned int const atX,
 					unsigned int const blockSize)
 {
-	int dwell = multipleThreadCommonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize);
+	int dwell = pooledThreadCommonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize);
+	std::cout << "dwell " << dwell << " " << (blockSize <= blockDim) << std::endl;
 	if ( dwell >= 0 ) {
 		fillBlock(dwellBuffer, dwell, atY, atX, blockSize);
-		if (mark)
-			markBorder(dwellBuffer, dwellFill, atY, atX, blockSize);
+		if (mark) {
+					markBorder(dwellBuffer, dwellFill, atY, atX, blockSize);
+		}
 	} else if (blockSize <= blockDim) {
 		computeBlock(dwellBuffer, cmin, dc, atY, atX, blockSize);
 		if (mark)
@@ -492,6 +497,7 @@ int main( int argc, char *argv[] )
 		unsigned int const correctedBlockSize = std::pow(subDiv,numDiv) * blockDim;
 		// Mariani-Silver subdivision algorithm
 		marianiSilver(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize);
+	    std::cout << "fine2" << std::endl;
 	} else {
 		// Traditional Mandelbrot-Set computation or the 'Escape Time' algorithm
 		unsigned int const NUM_THREAD = thread::hardware_concurrency();

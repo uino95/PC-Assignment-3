@@ -7,6 +7,8 @@
 #include <vector>
 #include "synchronized_queue.h"
 
+#include<iostream>
+
 class ThreadPool
 {
 private:
@@ -25,10 +27,21 @@ public:
         // SynchronizedQueue guarantees mutual exclusive access
         work_queue.put(func);
     }
-    void getWorkQueueLength()
+    int getWorkQueueLength()
     {
         return work_queue.size();
     }
 
+    void finish() {
+      done = true;
+    }
+
+    void reset() {
+      done = false;
+    }
+
+    void clear() {
+      work_queue.resize();
+    }
 };
 #endif // THREADPOOL_H
