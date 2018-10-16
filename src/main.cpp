@@ -6,7 +6,6 @@
 #include "utilities/lodepng.h"
 #include "utilities/rgba.hpp"
 #include "utilities/num.hpp"
-#include "utilities/thread_pool.hpp"
 #include <complex>
 #include <cassert>
 #include <limits>
@@ -282,30 +281,56 @@ void fillBlock(std::vector<std::vector<int>> &dwellBuffer,
 
 
 // define job data type here
-
 typedef struct job {
    std::vector<std::vector<int>> &dwellBuffer;
    int dwell;
    unsigned int atY;
    unsigned int atX;
    unsigned int blockSize;
-
 	 std::complex<double> dc;
 	 std::complex<double> cmin;
 } job;
 
+// define mutex, condition variable, atomic variables and deque here
 std::deque<job> queue;
 std::mutex mutexVariable2;
-std::mutex mutexVariable3;
 std::condition_variable myCv;
-atomic<int> counter(0), limite(0);
-// define mutex, condition variable and deque here
+atomic<int> counter(0), limit(0);
 
 void addWork(job task)
 {
 	unique_lock<mutex> lck(mutexVariable2);
 	queue.push_back(task);
 	myCv.notify_all();
+}
+
+// Original version of marianiSilver algorithm
+void marianiSilverOriginal( std::vector<std::vector<int>> &dwellBuffer,
+					std::complex<double> const &cmin,
+					std::complex<double> const &dc,
+					unsigned int const atY,
+					unsigned int const atX,
+					unsigned int const blockSize)
+{
+	int dwell = commonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize);
+	if ( dwell >= 0 ) {
+		fillBlock(dwellBuffer, dwell, atY, atX, blockSize);
+		if (mark) {
+					markBorder(dwellBuffer, dwellFill, atY, atX, blockSize);
+		}
+	} else if (blockSize <= blockDim) {
+		computeBlock(dwellBuffer, cmin, dc, atY, atX, blockSize);
+		if (mark)
+			markBorder(dwellBuffer, dwellCompute, atY, atX, blockSize);
+	} else {
+		// Subdivision
+		unsigned int newBlockSize = blockSize / subDiv;
+		for (unsigned int ydiv = 0; ydiv < subDiv; ydiv++) {
+			for (unsigned int xdiv = 0; xdiv < subDiv; xdiv++) {
+				marianiSilverOriginal(dwellBuffer, cmin, dc, atY + (ydiv * newBlockSize), atX + (xdiv * newBlockSize), newBlockSize);
+			}
+		}
+	}
 }
 
 //task 1b
@@ -361,7 +386,6 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 		vector<thread> threads;
 		for (unsigned int ydiv = 0; ydiv < subDiv; ydiv++) {
 			for (unsigned int xdiv = 0; xdiv < subDiv; xdiv++) {
-
 				threads.push_back(
 					thread(
 						marianiSilver,
@@ -377,14 +401,14 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 			}
 		}
 
-		for(int i=0;i<threads.size(); i++) {
+		for(unsigned int i=0;i<threads.size(); i++) {
 			threads.at(i).join();
 		}
 
 	}
 }
 
-//task 1c
+//task 2
 void marianiSilverJob( std::vector<std::vector<int>> &dwellBuffer,
 					std::complex<double> const &cmin,
 					std::complex<double> const &dc,
@@ -395,20 +419,18 @@ void marianiSilverJob( std::vector<std::vector<int>> &dwellBuffer,
 
 	int dwell = commonBorder(dwellBuffer, cmin, dc, atY, atX, blockSize);
 	if ( dwell >= 0 ) {
-		std::cout << "dwell >= 0" << std::endl;
 		fillBlock(dwellBuffer, dwell, atY, atX, blockSize);
 		if (mark) {
 					markBorder(dwellBuffer, dwellFill, atY, atX, blockSize);
 		}
 	} else if (blockSize <= blockDim) {
-		std::cout << "blockSize <= blockDim" << std::endl;
 		computeBlock(dwellBuffer, cmin, dc, atY, atX, blockSize);
 		if (mark)
 			markBorder(dwellBuffer, dwellCompute, atY, atX, blockSize);
 	} else {
-		std::cout << "else" << std::endl;
+		// Update the total number of job to execute
+		limit += subDiv * subDiv;
 		// Subdivision
-		limite += subDiv * subDiv;
 		unsigned int newBlockSize = blockSize / subDiv;
 		for (unsigned int ydiv = 0; ydiv < subDiv; ydiv++) {
 			for (unsigned int xdiv = 0; xdiv < subDiv; xdiv++) {
@@ -443,19 +465,26 @@ void help() {
 	std::cout << "\t" << "-t" << "\t" << "traditional computation (no Mariani-Silver)" << std::endl;
 }
 
+// Multiple thread version for task 2c
 void worker(std::vector<std::vector<int>> &dwellBuffer) {
 
+	// Initialize an empty job
 	job currentTask{
 		dwellBuffer,0,0,0,0,NULL,NULL
 	};
 
-	while(counter < limite) {
+	// Continue until there is work to do
+	while(counter < limit) {
+		// Scope of mutexVariable2
 		{
+			// Acquire the lock on mutexVariable2
 			unique_lock<mutex> lck(mutexVariable2);
-			while(queue.empty() && counter < limite) {
+			// If the queue is empty wait until a new job it's available
+			while(queue.empty() && counter < limit) {
 				myCv.wait(lck);
 			}
-			if(counter < limite){
+			// If there is work to do just pop it from the queue
+			if(counter < limit){
 				currentTask.dwellBuffer = queue.front().dwellBuffer;
 				currentTask.cmin = queue.front().cmin;
 				currentTask.dc = queue.front().dc;
@@ -465,11 +494,14 @@ void worker(std::vector<std::vector<int>> &dwellBuffer) {
 				queue.pop_front();
 				counter++;
 			}
+		// Unlock mutexVariable2
 		}
+		// Execute the actual work
 		marianiSilverJob(currentTask.dwellBuffer, currentTask.cmin, currentTask.dc, currentTask.atY, currentTask.atX, currentTask.blockSize);
 	}
 }
 
+// Single thread worker function for task 2a
 void workerWithoutThread(void){
 	while(!queue.empty()){
 		job currentTask = queue.front();
@@ -565,7 +597,8 @@ int main( int argc, char *argv[] )
 
 	std::vector<std::vector<int>> dwellBuffer(res, std::vector<int>(res, -1));
 	vector<thread> threads;
-	unsigned int const NUM_THREAD = 12;
+	unsigned int const NUM_THREAD = thread::hardware_concurrency();
+
 
 	if (mariani) {
 		// Scale the blockSize from res up to a subdividable value
@@ -576,9 +609,11 @@ int main( int argc, char *argv[] )
 		// Mariani-Silver subdivision algorithm
 
 		addWork(job{dwellBuffer, 0, 0, 0, correctedBlockSize, dc, cmin});
-		limite = 1;
+		// Initialize the variable to 1 in order to execute the first step
+		limit = 1;
 
-		for(int i=0;i<NUM_THREAD; i++) {
+		// Initialize the vector of threads and make them execute the worker function
+		for(unsigned int i=0;i<NUM_THREAD; i++) {
 			threads.push_back(
 				thread(
 					worker,
@@ -587,16 +622,19 @@ int main( int argc, char *argv[] )
 			);
 		}
 
-		for(int i=0;i<NUM_THREAD; i++) {
+		// Wait for all the thread to finish
+		for(unsigned int i=0;i<NUM_THREAD; i++) {
 			threads.at(i).join();
 		}
 
+		//marianiSilverOriginal(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize);
 	} else {
 		// Traditional Mandelbrot-Set computation or the 'Escape Time' algorithm
 		cout << "NUM THREAD " << NUM_THREAD << endl;
 		unsigned int const HEIGHT_PER_THREAD = res / NUM_THREAD;
 
-		for(int i=0;i<NUM_THREAD; i++) {
+		// Initialize the vector of threads and make them execute the threadedComputeBlock function
+		for(unsigned int i=0;i<NUM_THREAD; i++) {
 			threads.push_back(
 
 				thread(
@@ -612,7 +650,8 @@ int main( int argc, char *argv[] )
 			);
 		}
 
-		for(int i=0;i<NUM_THREAD; i++) {
+		// Wait for all the thread to finish
+		for(unsigned int i=0;i<NUM_THREAD; i++) {
 			threads.at(i).join();
 		}
 

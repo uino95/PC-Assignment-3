@@ -1,4 +1,4 @@
-RES := 1024
+RES := 2048
 OUTPUT := output/mandel.png
 OPTIMIZATION := 3
 
