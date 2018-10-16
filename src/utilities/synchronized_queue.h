@@ -9,8 +9,6 @@ public:
     SynchronizedQueue() {}
     void put(const T &data);
     T get();
-    int size();
-
     int size()
     {
         return queue.size();

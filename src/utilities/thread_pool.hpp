@@ -25,7 +25,7 @@ public:
         // SynchronizedQueue guarantees mutual exclusive access
         work_queue.put(func);
     }
-    void getWorkQueueLength()
+    int getWorkQueueLength()
     {
         return work_queue.size();
     }
