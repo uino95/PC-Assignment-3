@@ -26,10 +26,10 @@ ThreadPool::~ThreadPool()
 
 void ThreadPool::worker_thread()
 {
+  std::cout << "inizio" << std::endl;
   while (!done)
   {
-      std::cout << "inizio " << work_queue.size() << std::endl;
       work_queue.get()(); //Get a function and call it
-      std::cout << "fine" << work_queue.size() << std::endl;
   }
+    std::cout << "fine" << std::endl;
 }

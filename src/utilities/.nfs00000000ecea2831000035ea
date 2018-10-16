@@ -7,8 +7,6 @@
 #include <vector>
 #include "synchronized_queue.h"
 
-#include<iostream>
-
 class ThreadPool
 {
 private:
@@ -32,16 +30,5 @@ public:
         return work_queue.size();
     }
 
-    void finish() {
-      done = true;
-    }
-
-    void reset() {
-      done = false;
-    }
-
-    void clear() {
-      work_queue.resize();
-    }
 };
 #endif // THREADPOOL_H

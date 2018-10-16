@@ -13,10 +13,6 @@ public:
     {
         return queue.size();
     }
-
-    void resize(int num = 0) {
-      queue.resize(num);
-    }
 private:
     SynchronizedQueue(const SynchronizedQueue &) = delete;
     SynchronizedQueue &operator=(const SynchronizedQueue &) = delete;

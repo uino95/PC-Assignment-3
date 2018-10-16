@@ -35,13 +35,9 @@ public:
     void finish() {
       done = true;
     }
-
+    
     void reset() {
       done = false;
-    }
-
-    void clear() {
-      work_queue.resize();
     }
 };
 #endif // THREADPOOL_H
