@@ -416,9 +416,6 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 			}
 		}
 
-		counter += threads.size();
-		cout << " " << counter << endl;
-
 		for(unsigned int i=0;i<threads.size(); i++) {
 			threads.at(i).join();
 		}
