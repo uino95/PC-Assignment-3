@@ -394,52 +394,56 @@ int main( int argc, char *argv[] )
 	// The colour iterations defines how often the colour gradient will
 	// be seen on the final picture. Basically the repetitive factor
 	createColourMap(maxDwell / colourIterations);
+
 	std::vector<unsigned char> frameBuffer(res * res * 4, 0);
 	unsigned char *pixel = &(frameBuffer.at(0));
 
-	vector<unsigned char *> pointersToPixel;
-	pointersToPixel.resize(threadSize);
-	//rgba colour = NULL;
-	//last one has more
-	int step = (res * res) / threadSize;
-
-	int frameBufferSize = 0;
-	for (unsigned int x = 0; x < threadSize; x++) {
-		if(x >= threadSize -1) {
-			frameBufferSize = res * res * 4 - step;
-		}
-		pointersToPixel.at(x) = &(frameBuffer.at(frameBufferSize));
-		frameBufferSize += step;
-	}
-
-	int limit = 0;
-	int numberOfThread = 0;
-	int start = 0;
-
+	/**
+	* Here starts the updated version that allows the implementation with OpenMP.
+	* Each pragma is defined with the maximum number of threads, so we initialized
+	* threadSize as a global variable.
+	* counters: vector of offsets of the pixels to be updated by each thread.
+	* 	Takes in consideration how OpenMP assigns the iterations to each thread.
+	* 	In details, the algorithm used by OpenMP to do this is the same that we use to
+	* 	initialize counters. Indeed, we first init threadSizes with the same sizes.
+	*		Then, as counters is cumulative, we sum the previous value to threadSizes.at(i-1) * 4
+	* threadSizes: number of iterations that will be computed by each thread.
+	*/
 	vector<int> counters;
 	vector<int> threadSizes;
 	counters.resize(threadSize, 0);
 	threadSizes.resize(threadSize, 0);
 
 	int i = 0;
+	/**
+	* Initialization of threadSizes
+	*/
 	while(i < res) {
 		threadSizes.at(i%12) += res;
 		i++;
 	}
-
+	/**
+	* Initialization of counters (as explained before, by considering how OpenMP splits up the work for each thread)
+	*/
 	for(int i=1;i<counters.size();i++) {
 		counters.at(i) = counters.at(i-1) + threadSizes.at(i-1) * 4;
 	}
 
-	// Map the dwellBuffer to the frameBuffer
 	int omp_get_thread_num();
 	{
 		#pragma omp parallel for
 		for (unsigned int y = 0; y < res; y++) {
-			numberOfThread = omp_get_thread_num();
+			/**
+			* Number of thread currently running. Used as a pointer to the vectors.
+			*/
+			int numberOfThread = omp_get_thread_num();
 			#pragma omp parallel for
 			for (unsigned int x = 0; x < res; x++) {
 				const rgba &colour = dwellColor(std::complex<double>(x,y), dwellBuffer.at(y).at(x));
+				/**
+				* Position is the offset starting from frameBuffer[0].
+				* Each time the current thread updates the colours, we improve this counter.
+				*/
 				int position = counters.at(numberOfThread);
 				pixel[position] = colour.r;
 				pixel[position + 1] = colour.g;
