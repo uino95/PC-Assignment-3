@@ -401,10 +401,12 @@ void marianiSilver( std::vector<std::vector<int>> &dwellBuffer,
 			}
 		}
 
+		counter += threads.size();
+		cout << " " << counter << endl;
+
 		for(unsigned int i=0;i<threads.size(); i++) {
 			threads.at(i).join();
 		}
-
 	}
 }
 
@@ -608,11 +610,12 @@ int main( int argc, char *argv[] )
 		unsigned int const correctedBlockSize = std::pow(subDiv,numDiv) * blockDim;
 		// Mariani-Silver subdivision algorithm
 
-		addWork(job{dwellBuffer, 0, 0, 0, correctedBlockSize, dc, cmin});
+		//addWork(job{dwellBuffer, 0, 0, 0, correctedBlockSize, dc, cmin});
 		// Initialize the variable to 1 in order to execute the first step
-		limit = 1;
+		//limit = 1;
 
 		// Initialize the vector of threads and make them execute the worker function
+/*
 		for(unsigned int i=0;i<NUM_THREAD; i++) {
 			threads.push_back(
 				thread(
@@ -628,6 +631,8 @@ int main( int argc, char *argv[] )
 		}
 
 		//marianiSilverOriginal(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize);
+*/
+		marianiSilver(dwellBuffer, cmin, dc, 0, 0, correctedBlockSize);
 	} else {
 		// Traditional Mandelbrot-Set computation or the 'Escape Time' algorithm
 		cout << "NUM THREAD " << NUM_THREAD << endl;
