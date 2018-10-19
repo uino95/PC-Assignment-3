@@ -414,7 +414,7 @@ int main( int argc, char *argv[] )
 	counters.resize(threadSize, 0);
 	threadSizes.resize(threadSize, 0);
 
-	int i = 0;
+	unsigned int i = 0;
 	/**
 	* Initialization of threadSizes
 	*/
@@ -425,7 +425,7 @@ int main( int argc, char *argv[] )
 	/**
 	* Initialization of counters (as explained before, by considering how OpenMP splits up the work for each thread)
 	*/
-	for(int i=1;i<counters.size();i++) {
+	for(unsigned int i=1;i<counters.size();i++) {
 		counters.at(i) = counters.at(i-1) + threadSizes.at(i-1) * 4;
 	}
 
